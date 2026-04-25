@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1F4E78">
+<title>Controle de Estoque v2</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f0f2f5; color: #1a1a1a; min-height: 100vh; padding-bottom: 80px;
+}
+header {
+  background: linear-gradient(135deg, #1F4E78 0%, #2E75B6 100%);
+  color: white; padding: 16px; position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+header h1 { font-size: 18px; font-weight: 600; text-align: center; }
+header .subtitle { font-size: 11px; text-align: center; opacity: 0.9; margin-top: 2px; }
+.connection-status {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 10px; font-weight: 600; margin-top: 4px;
+}
+.connected { background: #2e7d32; }
+.offline { background: #f57c00; }
+.tabs { display: flex; background: white; border-bottom: 1px solid #e0e0e0; position: sticky; top: 70px; z-index: 99; }
+.tab {
+  flex: 1; padding: 14px 8px; text-align: center; font-size: 13px;
+  font-weight: 600; color: #666; border-bottom: 3px solid transparent; cursor: pointer;
+}
+.tab.active { color: #1F4E78; border-bottom-color: #1F4E78; }
+.content { padding: 16px; }
+.card {
+  background: white; border-radius: 12px; padding: 16px;
+  margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.btn {
+  width: 100%; padding: 14px; border: none; border-radius: 10px;
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; transition: all 0.2s; font-family: inherit;
+}
+.btn-primary { background: #1F4E78; color: white; }
+.btn-primary:active { background: #163a59; transform: scale(0.98); }
+.btn-secondary { background: #2E75B6; color: white; }
+.btn-success { background: #2e7d32; color: white; }
+.btn-danger { background: #c62828; color: white; }
+.btn-outline { background: white; color: #1F4E78; border: 2px solid #1F4E78; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn + .btn { margin-top: 10px; }
+label {
+  display: block; font-size: 13px; font-weight: 600; color: #555;
+  margin-bottom: 6px; margin-top: 12px;
+}
+label.required::after { content: " *"; color: #c62828; }
+input, select, textarea {
+  width: 100%; padding: 12px; border: 1.5px solid #d0d0d0;
+  border-radius: 8px; font-size: 15px; font-family: inherit;
+  background: white; -webkit-appearance: none;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: #1F4E78; }
+.row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#reader { width: 100%; border-radius: 12px; overflow: hidden; margin-bottom: 12px; }
+.scanner-container {
+  display: none; background: black; border-radius: 12px; padding: 8px; margin-bottom: 12px;
+}
+.scanner-container.active { display: block; }
+.scanner-help {
+  background: #fff3cd; border-left: 4px solid #f57c00;
+  padding: 10px 12px; border-radius: 6px; margin-bottom: 10px;
+  font-size: 12px; color: #5d4037;
+}
+.section-title {
+  font-size: 16px; font-weight: 700; color: #1F4E78;
+  margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #e8eef4;
+}
+.toast {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  background: #2e7d32; color: white; padding: 14px 20px; border-radius: 30px;
+  font-size: 14px; font-weight: 600; z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2); opacity: 0;
+  transition: opacity 0.3s; max-width: 90%; text-align: center;
+}
+.toast.show { opacity: 1; }
+.toast.error { background: #c62828; }
+.toast.warning { background: #f57c00; }
+.empty-state { text-align: center; padding: 40px 20px; color: #888; }
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+.item-card {
+  background: white; border-radius: 10px; padding: 12px;
+  margin-bottom: 8px; border-left: 4px solid #ccc; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.item-card.expiring-soon { border-left-color: #f57c00; background: #fff8e1; }
+.item-card.expiring-critical { border-left-color: #c62828; background: #ffebee; }
+.item-card .item-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.item-card .item-info {
+  font-size: 12px; color: #666; display: grid;
+  grid-template-columns: 1fr 1fr; gap: 4px 12px;
+}
+.item-card .qty-badge {
+  display: inline-block; background: #1F4E78; color: white;
+  padding: 4px 10px; border-radius: 12px; font-size: 12px;
+  font-weight: 700; margin-top: 6px;
+}
+.search-bar { position: relative; margin-bottom: 12px; }
+.search-bar input { padding-left: 40px; }
+.search-bar::before {
+  content: "🔍"; position: absolute; left: 12px; top: 50%;
+  transform: translateY(-50%); font-size: 16px;
+}
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); display: none; align-items: flex-end;
+  justify-content: center; z-index: 200;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: white; width: 100%; max-height: 90vh;
+  border-radius: 16px 16px 0 0; padding: 20px 16px; overflow-y: auto;
+  animation: slideUp 0.25s ease;
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.modal-title {
+  font-size: 17px; font-weight: 700; color: #1F4E78;
+  margin-bottom: 16px; padding-bottom: 10px; border-bottom: 2px solid #e8eef4;
+}
+.lote-option {
+  background: #f8f9fa; border: 1.5px solid #e0e0e0; border-radius: 10px;
+  padding: 12px; margin-bottom: 8px; cursor: pointer;
+}
+.lote-option.selected { border-color: #1F4E78; background: #e8eef4; }
+.lote-option .lote-num { font-weight: 700; font-size: 14px; color: #1F4E78; }
+.lote-option .lote-info { font-size: 12px; color: #666; margin-top: 4px; }
+.stats-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px; margin-bottom: 12px;
+}
+.stat-card {
+  background: white; padding: 12px 8px; border-radius: 10px;
+  text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.stat-card .value { font-size: 22px; font-weight: 700; color: #1F4E78; }
+.stat-card.warning .value { color: #f57c00; }
+.stat-card.danger .value { color: #c62828; }
+.stat-card .label { font-size: 11px; color: #666; margin-top: 2px; }
+.actions-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.config-section {
+  background: #e3f2fd; border: 1.5px dashed #1976d2;
+  border-radius: 10px; padding: 12px; margin-bottom: 12px;
+  font-size: 12px; color: #0d47a1;
+}
+.diagnostic {
+  font-family: monospace; font-size: 11px; background: #1a1a1a;
+  color: #00ff00; padding: 8px; border-radius: 6px;
+  margin-top: 8px; max-height: 120px; overflow-y: auto;
+  white-space: pre-wrap;
+}
+.pending-badge {
+  position: absolute; top: 8px; right: 8px;
+  background: #f57c00; color: white; padding: 2px 8px;
+  border-radius: 10px; font-size: 10px; font-weight: 700;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📦 Controle de Estoque</h1>
+  <div class="subtitle">
+    Mercadorias Secas — Fornecimento Naval<br>
+    <span class="connection-status offline" id="conn-status">⚪ Modo Local</span>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="entrada">↓ Entrada</div>
+  <div class="tab" data-tab="saida">↑ Saída</div>
+  <div class="tab" data-tab="estoque">📋 Estoque</div>
+  <div class="tab" data-tab="config">⚙️</div>
+</div>
+
+<div class="content">
+
+<!-- ABA ENTRADA -->
+<div class="page" id="page-entrada">
+  <div class="card">
+    <div class="section-title">Nova Entrada</div>
+    <button class="btn btn-primary" onclick="iniciarScan('produto')">
+      📷 Ler Código de Barras do Produto
+    </button>
+    <button class="btn btn-secondary" onclick="iniciarScan('nf')">
+      📄 Ler Código da Nota Fiscal (DANFE)
+    </button>
+    <button class="btn btn-outline" onclick="document.getElementById('codigo').focus()">
+      ✏️ Inserir Manualmente
+    </button>
+  </div>
+
+  <div class="scanner-container" id="scanner-container">
+    <div class="scanner-help" id="scanner-help">
+      Aponte a câmera traseira para o código. Mantenha estável e bem iluminado.
+    </div>
+    <div id="reader"></div>
+    <button class="btn btn-danger" onclick="pararScan()">Cancelar Leitura</button>
+    <div class="diagnostic" id="scan-diag" style="display:none"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Dados do Item</div>
+    <form id="form-entrada" onsubmit="salvarEntrada(event)">
+      <label class="required">Código do Produto (Código de Barras)</label>
+      <input type="text" id="codigo" required inputmode="numeric">
+      <label class="required">Descrição</label>
+      <input type="text" id="descricao" required>
+      <div class="row-2">
+        <div>
+          <label class="required">Marca</label>
+          <input type="text" id="marca" required>
+        </div>
+        <div>
+          <label class="required">Gramagem</label>
+          <input type="text" id="gramagem" placeholder="Ex: 5kg, 1L" required>
+        </div>
+      </div>
+      <div class="row-2">
+        <div>
+          <label class="required">Quantidade</label>
+          <input type="number" id="quantidade" min="1" required inputmode="numeric">
+        </div>
+        <div>
+          <label class="required">Unidade</label>
+          <select id="unidade" required>
+            <option value="">Selecione</option>
+            <option value="UN">UN - Unidade</option>
+            <option value="PCT">PCT - Pacote</option>
+            <option value="CX">CX - Caixa</option>
+            <option value="KG">KG - Quilograma</option>
+            <option value="L">L - Litro</option>
+            <option value="GFA">GFA - Garrafa</option>
+            <option value="LT">LT - Lata</option>
+            <option value="FRD">FRD - Fardo</option>
+            <option value="SC">SC - Saco</option>
+          </select>
+        </div>
+      </div>
+      <label class="required">Preço Unitário (R$)</label>
+      <input type="number" id="preco" step="0.01" min="0" required inputmode="decimal">
+      <label class="required">Número da Nota Fiscal</label>
+      <input type="text" id="nf" required>
+      <div class="row-2">
+        <div>
+          <label class="required">Validade</label>
+          <input type="date" id="validade" required>
+        </div>
+        <div>
+          <label class="required">Lote</label>
+          <input type="text" id="lote" required>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-success" style="margin-top: 20px;">
+        ✓ Confirmar Entrada
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ABA SAÍDA -->
+<div class="page" id="page-saida" style="display:none">
+  <div class="card">
+    <div class="section-title">Buscar Item para Saída</div>
+    <div class="search-bar">
+      <input type="text" id="busca-saida" placeholder="Digite a descrição..." oninput="filtrarParaSaida()">
+    </div>
+    <div id="lista-saida"></div>
+  </div>
+</div>
+
+<!-- ABA ESTOQUE -->
+<div class="page" id="page-estoque" style="display:none">
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="value" id="stat-itens">0</div>
+      <div class="label">Itens</div>
+    </div>
+    <div class="stat-card warning">
+      <div class="value" id="stat-amarelo">0</div>
+      <div class="label">≤ 90 dias</div>
+    </div>
+    <div class="stat-card danger">
+      <div class="value" id="stat-vermelho">0</div>
+      <div class="label">≤ 30 dias</div>
+    </div>
+  </div>
+  <div class="search-bar">
+    <input type="text" id="busca-estoque" placeholder="Buscar..." oninput="renderEstoque()">
+  </div>
+  <div id="lista-estoque"></div>
+</div>
+
+<!-- ABA CONFIG -->
+<div class="page" id="page-config" style="display:none">
+  <div class="card">
+    <div class="section-title">⚙️ Integração com Power Automate</div>
+    <div class="config-section">
+      Cole aqui as URLs dos fluxos Power Automate. Quando preenchidas, o app envia
+      cada movimentação automaticamente para a planilha do OneDrive.
+    </div>
+    <label>URL do Fluxo de ENTRADA</label>
+    <input type="url" id="webhook-entrada" placeholder="https://prod-XX.westus.logic.azure.com/...">
+    <label>URL do Fluxo de SAÍDA</label>
+    <input type="url" id="webhook-saida" placeholder="https://prod-XX.westus.logic.azure.com/...">
+    <label>Seu Nome (registrado nas movimentações)</label>
+    <input type="text" id="usuario-nome" placeholder="Ex: João Silva">
+    <button class="btn btn-primary" onclick="salvarConfig()" style="margin-top:16px;">
+      💾 Salvar Configuração
+    </button>
+    <button class="btn btn-outline" onclick="testarConexao()">
+      🔍 Testar Conexão
+    </button>
+  </div>
+
+  <div class="card">
+    <div class="section-title">📊 Dados Pendentes</div>
+    <div id="pendentes-info"></div>
+    <button class="btn btn-secondary" onclick="reenviarPendentes()" id="btn-reenviar">
+      🔄 Reenviar Pendentes
+    </button>
+  </div>
+
+  <div class="card">
+    <div class="section-title">🛠️ Diagnóstico</div>
+    <div id="diag-output" class="diagnostic">Toque em "Diagnosticar" para verificar permissões.</div>
+    <button class="btn btn-outline" onclick="diagnosticar()">🔍 Diagnosticar</button>
+    <button class="btn btn-danger" onclick="limparTudo()" style="margin-top:8px;">
+      🗑️ Limpar Todos os Dados Locais
+    </button>
+  </div>
+</div>
+
+</div>
+
+<div class="modal-overlay" id="modal-saida">
+  <div class="modal">
+    <div class="modal-title" id="modal-saida-titulo">Confirmar Saída</div>
+    <div id="modal-saida-conteudo"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ========== ESTADO E ARMAZENAMENTO ==========
+const DB = {
+  estoque: JSON.parse(localStorage.getItem('estoque') || '[]'),
+  movimentacao: JSON.parse(localStorage.getItem('movimentacao') || '[]'),
+  zerados: JSON.parse(localStorage.getItem('zerados') || '[]'),
+  pendentes: JSON.parse(localStorage.getItem('pendentes') || '[]'),
+  config: JSON.parse(localStorage.getItem('config') || '{}'),
+  
+  salvar() {
+    localStorage.setItem('estoque', JSON.stringify(this.estoque));
+    localStorage.setItem('movimentacao', JSON.stringify(this.movimentacao));
+    localStorage.setItem('zerados', JSON.stringify(this.zerados));
+    localStorage.setItem('pendentes', JSON.stringify(this.pendentes));
+    localStorage.setItem('config', JSON.stringify(this.config));
+  }
+};
+
+// ========== UI HELPERS ==========
+function toast(msg, tipo = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + tipo;
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function atualizarStatusConexao() {
+  const el = document.getElementById('conn-status');
+  if (DB.config.webhookEntrada && DB.config.webhookSaida) {
+    el.textContent = '🟢 Conectado ao Power Automate';
+    el.className = 'connection-status connected';
+  } else {
+    el.textContent = '⚪ Modo Local (sem integração)';
+    el.className = 'connection-status offline';
+  }
+}
+
+// ========== NAVEGAÇÃO ==========
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+    tab.classList.add('active');
+    document.getElementById('page-' + tab.dataset.tab).style.display = 'block';
+    if (tab.dataset.tab === 'estoque') renderEstoque();
+    if (tab.dataset.tab === 'saida') renderListaSaida();
+    if (tab.dataset.tab === 'config') carregarConfig();
+  });
+});
+
+// ========== SCANNER ROBUSTO ==========
+let html5QrCode = null;
+let scanTipo = null;
+
+function logDiag(msg) {
+  const el = document.getElementById('scan-diag');
+  el.style.display = 'block';
+  el.textContent += msg + '\n';
+}
+
+async function iniciarScan(tipo) {
+  scanTipo = tipo;
+  const container = document.getElementById('scanner-container');
+  const diag = document.getElementById('scan-diag');
+  const help = document.getElementById('scanner-help');
+  
+  diag.textContent = '';
+  diag.style.display = 'none';
+  container.classList.add('active');
+  container.scrollIntoView({behavior: 'smooth', block: 'center'});
+
+  // Verificações pré-leitura
+  if (location.protocol === 'file:') {
+    help.innerHTML = '⚠️ <strong>Erro: arquivo aberto localmente</strong><br>O navegador bloqueia a câmera quando o app é aberto direto do arquivo. Hospede o app no SharePoint para que funcione.';
+    logDiag('ERRO: protocolo file:// detectado');
+    logDiag('Solução: hospedar em HTTPS (SharePoint)');
+    return;
+  }
+  
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+    help.innerHTML = '⚠️ <strong>HTTPS necessário</strong><br>A câmera só funciona em sites HTTPS.';
+    logDiag('ERRO: HTTPS necessário, atual=' + location.protocol);
+    return;
+  }
+  
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    help.innerHTML = '⚠️ <strong>Navegador incompatível</strong><br>Use Chrome, Edge ou Safari atualizados.';
+    logDiag('ERRO: getUserMedia não disponível');
+    return;
+  }
+
+  if (typeof Html5Qrcode === 'undefined') {
+    help.innerHTML = '⚠️ <strong>Biblioteca não carregada</strong><br>Verifique sua conexão com internet.';
+    logDiag('ERRO: Html5Qrcode não carregada (sem internet?)');
+    return;
+  }
+
+  try {
+    if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+    
+    // Lista câmeras disponíveis
+    const cameras = await Html5Qrcode.getCameras();
+    logDiag('Câmeras detectadas: ' + cameras.length);
+    if (cameras.length === 0) {
+      help.innerHTML = '⚠️ Nenhuma câmera encontrada.';
+      return;
+    }
+
+    // Procura câmera traseira
+    let cameraId = cameras[0].id;
+    const traseira = cameras.find(c => /back|rear|environment|trás|traseira/i.test(c.label));
+    if (traseira) cameraId = traseira.id;
+    logDiag('Usando câmera: ' + (traseira?.label || cameras[0].label || cameraId));
+
+    // Configurações otimizadas para códigos de barras (EAN, Code128, DataMatrix da NFe)
+    const config = {
+      fps: 10,
+      qrbox: { width: 280, height: 160 },
+      aspectRatio: 1.7,
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.DATA_MATRIX,
+        Html5QrcodeSupportedFormats.PDF_417
+      ]
+    };
+
+    await html5QrCode.start(
+      cameraId,
+      config,
+      (decodedText) => {
+        logDiag('✓ Lido: ' + decodedText);
+        if (scanTipo === 'produto') {
+          document.getElementById('codigo').value = decodedText;
+          toast('Código lido: ' + decodedText);
+        } else {
+          // Para NF, tenta extrair só o número da NF do código DANFE (44 dígitos)
+          let nfNum = decodedText;
+          if (decodedText.length === 44 && /^\d+$/.test(decodedText)) {
+            // DANFE: posições 25-34 contêm o número da NF
+            nfNum = decodedText.substring(25, 34).replace(/^0+/, '');
+          }
+          document.getElementById('nf').value = nfNum;
+          toast('NF lida: ' + nfNum);
+        }
+        pararScan();
+      },
+      (errMsg) => {
+        // Erros de leitura por frame são normais, ignora
+      }
+    );
+    
+    help.innerHTML = '✅ Câmera ativa. Aponte para o código.';
+
+  } catch (err) {
+    logDiag('ERRO: ' + err.message);
+    if (err.name === 'NotAllowedError') {
+      help.innerHTML = '⚠️ <strong>Permissão negada</strong><br>Permita o acesso à câmera nas configurações do navegador.';
+    } else if (err.name === 'NotFoundError') {
+      help.innerHTML = '⚠️ <strong>Câmera não encontrada</strong>';
+    } else {
+      help.innerHTML = '⚠️ <strong>Erro:</strong> ' + err.message;
+    }
+  }
+}
+
+async function pararScan() {
+  try {
+    if (html5QrCode && html5QrCode.isScanning) {
+      await html5QrCode.stop();
+    }
+  } catch (e) { /* ignora */ }
+  document.getElementById('scanner-container').classList.remove('active');
+}
+
+// ========== DIAGNÓSTICO ==========
+async function diagnosticar() {
+  const el = document.getElementById('diag-output');
+  el.textContent = '';
+  
+  const log = (msg) => { el.textContent += msg + '\n'; };
+  
+  log('=== DIAGNÓSTICO ===');
+  log('Protocolo: ' + location.protocol);
+  log('Host: ' + location.hostname);
+  log('Navegador: ' + navigator.userAgent.substring(0, 60));
+  log('');
+  
+  log('Câmera disponível: ' + (!!navigator.mediaDevices?.getUserMedia ? 'SIM' : 'NÃO'));
+  log('HTTPS: ' + (location.protocol === 'https:' ? 'SIM' : 'NÃO'));
+  log('Biblioteca scanner: ' + (typeof Html5Qrcode !== 'undefined' ? 'CARREGADA' : 'NÃO CARREGADA'));
+  log('');
+  
+  log('Configuração:');
+  log('  Webhook Entrada: ' + (DB.config.webhookEntrada ? '✓ Configurado' : '✗ Não configurado'));
+  log('  Webhook Saída: ' + (DB.config.webhookSaida ? '✓ Configurado' : '✗ Não configurado'));
+  log('  Usuário: ' + (DB.config.usuario || '(não informado)'));
+  log('');
+  
+  log('Dados locais:');
+  log('  Itens em estoque: ' + DB.estoque.length);
+  log('  Movimentações: ' + DB.movimentacao.length);
+  log('  Itens zerados: ' + DB.zerados.length);
+  log('  Pendentes (sem sync): ' + DB.pendentes.length);
+  log('');
+
+  if (navigator.mediaDevices?.getUserMedia) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({video: true});
+      log('Permissão câmera: CONCEDIDA');
+      stream.getTracks().forEach(t => t.stop());
+    } catch (e) {
+      log('Permissão câmera: NEGADA (' + e.name + ')');
+    }
+  }
+}
+
+// ========== CONFIG ==========
+function carregarConfig() {
+  document.getElementById('webhook-entrada').value = DB.config.webhookEntrada || '';
+  document.getElementById('webhook-saida').value = DB.config.webhookSaida || '';
+  document.getElementById('usuario-nome').value = DB.config.usuario || '';
+  atualizarPendentes();
+}
+
+function salvarConfig() {
+  DB.config.webhookEntrada = document.getElementById('webhook-entrada').value.trim();
+  DB.config.webhookSaida = document.getElementById('webhook-saida').value.trim();
+  DB.config.usuario = document.getElementById('usuario-nome').value.trim();
+  DB.salvar();
+  atualizarStatusConexao();
+  toast('Configuração salva!');
+}
+
+async function testarConexao() {
+  if (!DB.config.webhookEntrada) { 
+    toast('Configure a URL de Entrada primeiro', 'error'); 
+    return; 
+  }
+  toast('Testando...');
+  try {
+    const resp = await fetch(DB.config.webhookEntrada, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({teste: true, timestamp: new Date().toISOString()})
+    });
+    if (resp.ok) {
+      toast('✅ Conexão OK!');
+    } else {
+      toast('Erro HTTP ' + resp.status, 'error');
+    }
+  } catch (e) {
+    toast('Erro: ' + e.message, 'error');
+  }
+}
+
+function atualizarPendentes() {
+  const el = document.getElementById('pendentes-info');
+  if (DB.pendentes.length === 0) {
+    el.innerHTML = '<div style="color:#2e7d32; font-size:13px;">✅ Tudo sincronizado</div>';
+    document.getElementById('btn-reenviar').style.display = 'none';
+  } else {
+    el.innerHTML = `<div style="color:#f57c00; font-size:13px;"><strong>${DB.pendentes.length}</strong> registros pendentes de envio</div>`;
+    document.getElementById('btn-reenviar').style.display = 'flex';
+  }
+}
+
+async function reenviarPendentes() {
+  if (DB.pendentes.length === 0) return;
+  toast('Reenviando ' + DB.pendentes.length + ' itens...');
+  const aReenviar = [...DB.pendentes];
+  DB.pendentes = [];
+  let ok = 0, fail = 0;
+  for (const p of aReenviar) {
+    const sucesso = await enviarPowerAutomate(p.tipo, p.dados);
+    if (sucesso) ok++; else { fail++; DB.pendentes.push(p); }
+  }
+  DB.salvar();
+  atualizarPendentes();
+  toast(`Enviados: ${ok} | Falhas: ${fail}`, fail ? 'warning' : 'success');
+}
+
+// ========== POWER AUTOMATE ==========
+async function enviarPowerAutomate(tipo, dados) {
+  const url = tipo === 'ENTRADA' ? DB.config.webhookEntrada : DB.config.webhookSaida;
+  if (!url) {
+    DB.pendentes.push({tipo, dados, ts: new Date().toISOString()});
+    DB.salvar();
+    return false;
+  }
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(dados)
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    return true;
+  } catch (e) {
+    DB.pendentes.push({tipo, dados, ts: new Date().toISOString()});
+    DB.salvar();
+    return false;
+  }
+}
+
+// ========== ENTRADA ==========
+async function salvarEntrada(e) {
+  e.preventDefault();
+  const item = {
+    id: Date.now(),
+    codigo: document.getElementById('codigo').value.trim(),
+    descricao: document.getElementById('descricao').value.trim(),
+    marca: document.getElementById('marca').value.trim(),
+    gramagem: document.getElementById('gramagem').value.trim(),
+    quantidade: parseInt(document.getElementById('quantidade').value),
+    unidade: document.getElementById('unidade').value,
+    preco: parseFloat(document.getElementById('preco').value),
+    nf: document.getElementById('nf').value.trim(),
+    validade: document.getElementById('validade').value,
+    lote: document.getElementById('lote').value.trim(),
+    dataEntrada: new Date().toISOString(),
+    status: 'ATIVO'
+  };
+
+  // Atualiza estoque local
+  const existente = DB.estoque.find(i => i.codigo === item.codigo && i.lote === item.lote);
+  if (existente) {
+    existente.quantidade += item.quantidade;
+    existente.preco = item.preco;
+    existente.nf = item.nf;
+  } else {
+    DB.estoque.push(item);
+  }
+
+  DB.movimentacao.push({
+    dataHora: new Date().toISOString(),
+    tipo: 'ENTRADA',
+    ...item,
+    usuario: DB.config.usuario || '-'
+  });
+  DB.salvar();
+
+  // Envia ao Power Automate
+  const payload = {
+    tipo: 'ENTRADA',
+    dataHora: new Date().toISOString(),
+    codigo: item.codigo,
+    descricao: item.descricao,
+    marca: item.marca,
+    gramagem: item.gramagem,
+    quantidade: item.quantidade,
+    unidade: item.unidade,
+    preco: item.preco,
+    nf: item.nf,
+    validade: item.validade,
+    lote: item.lote,
+    usuario: DB.config.usuario || '-'
+  };
+
+  const sucesso = await enviarPowerAutomate('ENTRADA', payload);
+  if (sucesso) {
+    toast('✓ Entrada registrada e sincronizada!');
+  } else if (DB.config.webhookEntrada) {
+    toast('Salvo localmente. Sincronizará quando online.', 'warning');
+  } else {
+    toast('Entrada salva (modo local)');
+  }
+  
+  document.getElementById('form-entrada').reset();
+}
+
+// ========== SAÍDA ==========
+let saidaSelecionada = null;
+
+function renderListaSaida() { filtrarParaSaida(); }
+
+function filtrarParaSaida() {
+  const busca = (document.getElementById('busca-saida').value || '').toLowerCase();
+  const lista = document.getElementById('lista-saida');
+  if (DB.estoque.length === 0) {
+    lista.innerHTML = '<div class="empty-state"><div class="icon">📭</div>Nenhum item em estoque</div>';
+    return;
+  }
+  const agrupado = {};
+  DB.estoque.forEach(item => {
+    if (!agrupado[item.codigo]) agrupado[item.codigo] = { ...item, lotes: [], totalQtd: 0 };
+    agrupado[item.codigo].lotes.push(item);
+    agrupado[item.codigo].totalQtd += item.quantidade;
+  });
+  const items = Object.values(agrupado).filter(item =>
+    item.descricao.toLowerCase().includes(busca) ||
+    item.marca.toLowerCase().includes(busca) ||
+    item.codigo.includes(busca)
+  );
+  if (items.length === 0) {
+    lista.innerHTML = '<div class="empty-state"><div class="icon">🔍</div>Nada encontrado</div>';
+    return;
+  }
+  lista.innerHTML = items.map(item => {
+    const minDias = Math.min(...item.lotes.map(l => diasParaVencer(l.validade)));
+    const cls = minDias <= 30 ? 'expiring-critical' : (minDias <= 90 ? 'expiring-soon' : '');
+    return `
+      <div class="item-card ${cls}" onclick='abrirSaida(${JSON.stringify(item.codigo)})'>
+        <div class="item-name">${item.descricao} — ${item.marca}</div>
+        <div class="item-info">
+          <span><strong>Gramagem:</strong> ${item.gramagem}</span>
+          <span><strong>Lotes:</strong> ${item.lotes.length}</span>
+        </div>
+        <span class="qty-badge">Total: ${item.totalQtd} ${item.unidade}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function diasParaVencer(d) {
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  return Math.floor((new Date(d) - hoje) / 86400000);
+}
+
+function abrirSaida(codigo) {
+  const lotes = DB.estoque.filter(i => i.codigo === codigo);
+  if (lotes.length === 0) return;
+  document.getElementById('modal-saida-titulo').textContent = lotes[0].descricao;
+  const conteudo = document.getElementById('modal-saida-conteudo');
+  conteudo.innerHTML = `
+    <div style="margin-bottom:12px; font-size:13px; color:#666;">Toque no lote desejado:</div>
+    ${lotes.map(lote => {
+      const dias = diasParaVencer(lote.validade);
+      const cor = dias <= 30 ? '#c62828' : (dias <= 90 ? '#f57c00' : '#666');
+      const dt = new Date(lote.validade + 'T00:00:00').toLocaleDateString('pt-BR');
+      return `<div class="lote-option" onclick="selecionarLote(${lote.id}, this)">
+        <div class="lote-num">Lote: ${lote.lote}</div>
+        <div class="lote-info">Validade: <span style="color:${cor}; font-weight:600;">${dt}</span> (${dias} dias)<br>
+        Estoque: <strong>${lote.quantidade} ${lote.unidade}</strong> · NF: ${lote.nf}</div>
+      </div>`;
+    }).join('')}
+    <div id="form-saida-detalhes" style="display:none; margin-top:16px;">
+      <label class="required">Quantidade a Retirar</label>
+      <input type="number" id="qtd-saida" min="1" inputmode="numeric">
+      <label class="required">Centro de Custo (Nome do Navio)</label>
+      <input type="text" id="navio-saida" placeholder="Ex: MV Atlantic Star">
+      <label class="required">Número SEA</label>
+      <input type="text" id="sea-saida" placeholder="Ex: SEA-2026-001">
+      <div class="actions-row">
+        <button class="btn btn-outline" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btn-success" onclick="confirmarSaida()">Confirmar</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('modal-saida').classList.add('active');
+}
+
+function selecionarLote(id, el) {
+  document.querySelectorAll('.lote-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  saidaSelecionada = id;
+  document.getElementById('form-saida-detalhes').style.display = 'block';
+  document.getElementById('qtd-saida').focus();
+}
+
+async function confirmarSaida() {
+  if (!saidaSelecionada) { toast('Selecione um lote', 'error'); return; }
+  const qtd = parseInt(document.getElementById('qtd-saida').value);
+  const navio = document.getElementById('navio-saida').value.trim();
+  const sea = document.getElementById('sea-saida').value.trim();
+  if (!qtd || qtd < 1) { toast('Qtd inválida', 'error'); return; }
+  if (!navio) { toast('Informe o navio', 'error'); return; }
+  if (!sea) { toast('Informe o SEA', 'error'); return; }
+  
+  const idx = DB.estoque.findIndex(i => i.id === saidaSelecionada);
+  if (idx === -1) return;
+  const item = DB.estoque[idx];
+  if (qtd > item.quantidade) { toast(`Insuficiente. Disp: ${item.quantidade}`, 'error'); return; }
+
+  const movimento = {
+    dataHora: new Date().toISOString(),
+    tipo: 'SAÍDA',
+    codigo: item.codigo, descricao: item.descricao, marca: item.marca,
+    gramagem: item.gramagem, quantidade: qtd, unidade: item.unidade,
+    preco: item.preco, nf: item.nf, validade: item.validade,
+    lote: item.lote, navio, sea, usuario: DB.config.usuario || '-'
+  };
+  DB.movimentacao.push(movimento);
+  item.quantidade -= qtd;
+
+  let zerou = false;
+  if (item.quantidade === 0) {
+    zerou = true;
+    const totalRetirado = DB.movimentacao
+      .filter(m => m.tipo === 'SAÍDA' && m.codigo === item.codigo && m.lote === item.lote)
+      .reduce((s, m) => s + m.quantidade, 0);
+    const historico = DB.movimentacao
+      .filter(m => m.tipo === 'SAÍDA' && m.codigo === item.codigo && m.lote === item.lote)
+      .map(m => `${new Date(m.dataHora).toLocaleDateString('pt-BR')}: ${m.quantidade} ${m.unidade} → ${m.navio} (${m.sea})`)
+      .join(' | ');
+    DB.zerados.push({
+      dataZeramento: new Date().toISOString(),
+      codigo: item.codigo, descricao: item.descricao, marca: item.marca,
+      gramagem: item.gramagem, unidade: item.unidade, preco: item.preco,
+      nf: item.nf, validade: item.validade, lote: item.lote,
+      totalRetirado, navio, sea, historico
+    });
+    DB.estoque.splice(idx, 1);
+  }
+
+  DB.salvar();
+
+  const payload = {
+    tipo: 'SAÍDA',
+    dataHora: new Date().toISOString(),
+    codigo: item.codigo, descricao: item.descricao, marca: item.marca,
+    gramagem: item.gramagem, quantidade: qtd, unidade: item.unidade,
+    preco: item.preco, nf: item.nf, validade: item.validade,
+    lote: item.lote, navio, sea,
+    usuario: DB.config.usuario || '-',
+    zerou: zerou,
+    estoqueRestante: item.quantidade
+  };
+  
+  const sucesso = await enviarPowerAutomate('SAIDA', payload);
+  if (sucesso) {
+    toast(zerou ? 'Saída ok! Item zerado e movido.' : 'Saída sincronizada!');
+  } else if (DB.config.webhookSaida) {
+    toast('Salvo localmente. Sincronizará quando online.', 'warning');
+  } else {
+    toast(zerou ? 'Saída salva. Item zerou.' : 'Saída salva (local)');
+  }
+
+  fecharModal();
+  renderListaSaida();
+}
+
+function fecharModal() {
+  document.getElementById('modal-saida').classList.remove('active');
+  saidaSelecionada = null;
+}
+
+// ========== ESTOQUE ==========
+function renderEstoque() {
+  const busca = (document.getElementById('busca-estoque')?.value || '').toLowerCase();
+  document.getElementById('stat-itens').textContent = DB.estoque.length;
+  document.getElementById('stat-amarelo').textContent = DB.estoque.filter(i => {
+    const d = diasParaVencer(i.validade); return d > 30 && d <= 90;
+  }).length;
+  document.getElementById('stat-vermelho').textContent = DB.estoque.filter(i => 
+    diasParaVencer(i.validade) <= 30
+  ).length;
+  
+  const ordenado = [...DB.estoque].sort((a, b) => {
+    const da = diasParaVencer(a.validade), db = diasParaVencer(b.validade);
+    const ca = da <= 30 ? 0 : (da <= 90 ? 1 : 2);
+    const cb = db <= 30 ? 0 : (db <= 90 ? 1 : 2);
+    if (ca !== cb) return ca - cb;
+    if (ca === 2) return a.descricao.localeCompare(b.descricao);
+    return da - db;
+  });
+  
+  const filtrados = ordenado.filter(i =>
+    i.descricao.toLowerCase().includes(busca) ||
+    i.marca.toLowerCase().includes(busca) ||
+    i.codigo.includes(busca) ||
+    i.lote.toLowerCase().includes(busca)
+  );
+  
+  const lista = document.getElementById('lista-estoque');
+  if (filtrados.length === 0) {
+    lista.innerHTML = '<div class="empty-state"><div class="icon">📭</div>Estoque vazio</div>';
+    return;
+  }
+  lista.innerHTML = filtrados.map(item => {
+    const dias = diasParaVencer(item.validade);
+    const cls = dias <= 30 ? 'expiring-critical' : (dias <= 90 ? 'expiring-soon' : '');
+    const dt = new Date(item.validade + 'T00:00:00').toLocaleDateString('pt-BR');
+    return `<div class="item-card ${cls}">
+      <div class="item-name">${item.descricao} — ${item.marca}</div>
+      <div class="item-info">
+        <span><strong>Cód:</strong> ${item.codigo}</span>
+        <span><strong>Lote:</strong> ${item.lote}</span>
+        <span><strong>Gramagem:</strong> ${item.gramagem}</span>
+        <span><strong>NF:</strong> ${item.nf}</span>
+        <span><strong>Validade:</strong> ${dt}</span>
+        <span><strong>Dias:</strong> ${dias}</span>
+        <span><strong>Preço:</strong> R$ ${item.preco.toFixed(2)}</span>
+        <span><strong>Estoque:</strong> ${item.quantidade} ${item.unidade}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function limparTudo() {
+  if (!confirm('APAGAR TODOS os dados locais?')) return;
+  if (!confirm('Confirma de novo?')) return;
+  DB.estoque = []; DB.movimentacao = []; DB.zerados = []; DB.pendentes = [];
+  DB.salvar();
+  renderEstoque();
+  toast('Dados apagados', 'warning');
+}
+
+// Inicialização
+atualizarStatusConexao();
+renderEstoque();
+
+// Tenta reenviar pendentes ao iniciar (se online)
+window.addEventListener('online', () => {
+  if (DB.pendentes.length > 0) reenviarPendentes();
+});
+</script>
+</body>
+</html>
